@@ -175,5 +175,98 @@ app.listen(3000, function (){
 
 #### 3. session (file-store)
 
+```
+메모리에 저장하지 않고 영구적으로 저장할 수 있는 방법
+```
+```
+express는 session기능이 없음
+express-session 모듈이 그 기능을 함
+메모리를 다른 것(ex. 파일)에 저장하고 싶을때 사용하는 모듈이
+session-file-store. 
+express-session이란 모듈에 의존하기 때문에
+인자로 session이 오게 됨.
+위 모듈을 통해 파일에 세션을 저장할 수 있게 해줌.
+
+```
+
 https://www.npmjs.com/package/session-file-store
 
+```node.js
+var express = require('express');
+var session = require('express-session');
+var FileStore = require('session-file-store')(session);
+var bodyParser = require('body-parser')
+var app = express();
+app.use(bodyParser.urlencoded({extended: false}))
+
+app.use(session({
+    secret: 'fsadf3@@e213t',
+    resave: false,
+    saveUninitialized: true,
+    store: new FileStore()
+}));
+
+```
+
+```node.js
+app.get('/auth/logout',function (req, res){
+    delete req.session.displayName;
+    req.session.save( () => {
+        res.redirect('/welcome');
+    });
+});
+```
+세션 스토어로 저장이 끝난 다음에야 redirect를 한다는 뜻
+
+```node.js
+app.post('/auth/login', function (req, res){
+    var user = {
+        username: 'egoing',
+        password: '111',
+        displayName: 'Egoing'
+    };
+    var uname = req.body.username;
+    var pwd = req.body.password;
+    if(uname === user.username && pwd == user.password){
+        req.session.displayName = user.displayName;
+        req.session.save( () => {
+            res.redirect('/welcome');
+        });
+    } else {
+        res.send('Who are you? <a href="/auth/login">login</a>');
+    }
+});
+```
+
+https://www.npmjs.com/package/session-file-store
+
+![image](https://user-images.githubusercontent.com/69338643/125915911-461fe78f-c9ff-4a72-93d6-d21fdecc330a.png)
+
+#### 4. session(mysql)
+
+https://www.npmjs.com/package/express-mysql-session
+
+```node.js
+var express = require('express');
+var session = require('express-session');
+var MySQLStore = require('express-mysql-session')(session);
+var bodyParser = require('body-parser')
+var app = express();
+app.use(bodyParser.urlencoded({extended: false}))
+
+// MySQL의 경우 DB라 옵션을 반드시 사용해야함
+app.use(session({
+    secret: 'fsadf3@@e213t',
+    resave: false,
+    saveUninitialized: true,
+    store: new MySQLStore({
+        host: 'localhost',
+        port: 3306,
+        user: 'root',
+        password: '-',
+        database: 'session_test'
+    })
+}));
+
+```
+![image](https://user-images.githubusercontent.com/69338643/125918572-465820e5-6c24-4592-9d1c-fb2365a66175.png)
