@@ -1,7 +1,8 @@
 var express = require('express');
 var session = require('express-session');
 var FileStore = require('session-file-store')(session);
-var bodyParser = require('body-parser')
+var bodyParser = require('body-parser');
+var sha256 = require('sha256');
 var app = express();
 app.use(bodyParser.urlencoded({extended: false}))
 
@@ -45,22 +46,35 @@ app.get('/welcome', function (req, res){
 });
 
 app.post('/auth/login', function (req, res){
-    var user = {
-        username: 'egoing',
-        password: '111',
-        displayName: 'Egoing'
-    };
     var uname = req.body.username;
     var pwd = req.body.password;
-    if(uname === user.username && pwd == user.password){
-        req.session.displayName = user.displayName;
-        req.session.save( () => {
-            res.redirect('/welcome');
-        });
-    } else {
-        res.send('Who are you? <a href="/auth/login">login</a>');
+    for(var i=0; i<users.length; i++){
+        var user = users[i];
+        if(uname === user.username && sha256(pwd+user.salt) === user.password) {
+            req.session.displayName = user.displayName;
+            return req.session.save(() => {
+                res.redirect('/welcome');
+            });
+        }
     }
+    res.send('Who are you? <a href="/auth/login">login</a>');
 });
+
+var users = [
+    {
+        username: 'egoing',
+        password: '844dcd28913ee4644925aa636e0726702a2cbb74e3440c86c292b3f33c24d779',
+        salt: '@hfda#@sfd',
+        displayName: 'Egoing'
+    },
+    {
+        username: 'korea',
+        password: '6a584f4bc484811f82d1f43142fdbe6f87496b2ac85dd7b4ac3f31f409783843',
+        salt: '!#gosdjf*#f',
+        displayName: 'Korea'
+    }
+];
+
 
 app.get('/auth/login', function (req, res){
     var output = `
