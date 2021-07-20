@@ -173,3 +173,115 @@ var users = [
 ```
 
 ### 2. PBKDF2
+
+https://www.npmjs.com/package/pbkdf2-password
+
+``` Usage
+var bkfd2Password = require("pbkdf2-password");
+var hasher = bkfd2Password();
+var assert = require("assert");
+var opts = {
+  password: "helloworld"
+};
+ 
+hasher(opts, function(err, pass, salt, hash) {
+  opts.salt = salt;
+  hasher(opts, function(err, pass, salt, hash2) {
+    assert.deepEqual(hash2, hash);
+ 
+    // password mismatch
+    opts.password = "aaa";
+    hasher(opts, function(err, pass, salt, hash2) {
+      assert.notDeepEqual(hash2, hash);
+      console.log("OK");
+    });
+  });
+});
+```
+* 자동으로 salt, hash 
+
+
+#### 1. import하기
+
+```node.js
+var express = require('express');
+var session = require('express-session');
+var FileStore = require('session-file-store')(session);
+var bodyParser = require('body-parser');
+var bkfd2Password = require("pbkdf2-password");
+var hasher = bkfd2Password();
+
+
+var app = express();
+app.use(bodyParser.urlencoded({extended: false}))
+```
+#### 2. 로그인하기
+``` node.js
+app.post('/auth/login', function (req, res){
+    var uname = req.body.username;
+    var pwd = req.body.password;
+    for(var i=0; i<users.length; i++){
+        var user = users[i];
+        if (uname === user.username) {
+            return hasher({password: pwd, salt:user.salt}, function(err, pass, salt, hash){
+                if(hash === user.password){
+                    req.session.displayName = user.displayName;
+                    req.session.save(function (){
+                        res.redirect('/welcome');
+                    })
+                } else {
+                    res.send('Who are you? <a href="/auth/login">login</a>');
+                }
+            });
+        }
+    }
+});
+
+var users = [
+    {
+        username: 'egoing',
+        password: 'o4/UB6Cl78nJCJHOE11WXNikaZGR34otgENF/ZkouisQKFaEnLR2hHppsUXQwxNl1AnURUqdrJ4R4WGw+6mbs11kV7EP2SQiGBzMk0Xu87Q71brqi7EUCQr1Y15baz90dtjn/WAJdsQKm4qEI0iJBYHwKL/Wf1dorohsz3RqOYQ=',
+        salt: 'zDEnAkYbeJaOzdo+EMLF1ppW3FcjUNbYiwUiDYZuu/PV91yvtEXyNoQm/uf+31fy19YDG0Ul3/OVYaweuEqp4Q==',
+        displayName: 'Egoing'
+    }
+];
+```
+#### 3. 회원가입하기
+```node.js
+app.post('/auth/register', function(req, res){
+    hasher({password: req.body.password}, function (err, pass, salt, hash){
+        var user = {
+            username: req.body.username,
+            password: hash,
+            salt: salt,
+            displayName: req.body.displayName
+        };
+        users.push(user);
+        req.session.displayName = req.body.displayName;
+        req.session.save(function(){
+            res.redirect('/welcome');
+        });
+    });
+
+});
+app.get('/auth/register', function(req, res){
+    var output = `
+    <h1>Register</h1>
+    <form action="/auth/register" method="post">
+        <p>
+            <input type="text" name="username" placeholder="username">
+        </p>          
+        <p>
+            <input type="password" name="password" placeholder="password">
+        </p>          
+        <p>
+            <input type="text" name="displayName" placeholder="displayName">
+        </p>    
+        <p>
+            <input type="submit">
+        </p>
+    </form>
+    `
+    res.send(output);
+})
+```
