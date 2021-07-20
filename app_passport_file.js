@@ -3,12 +3,16 @@ var session = require('express-session');
 var FileStore = require('session-file-store')(session);
 var bodyParser = require('body-parser');
 var bkfd2Password = require("pbkdf2-password");
+var passport = require('passport')
+var LocalStrategy = require('passport-local').Strategy;
+
 var hasher = bkfd2Password();
 
 
 var app = express();
 app.use(bodyParser.urlencoded({extended: false}))
 
+// 세션을 사용하겠다.
 app.use(session({
     secret: 'fsadf3@@e213t',
     resave: false,
@@ -16,6 +20,9 @@ app.use(session({
     store: new FileStore()
 }));
 
+app.use(passport.initialize());
+// session 사용하기 위한 코드 뒤에 작성해야함 (세션을 사용하겠다고 했는데 설정이 안되면 안됨)
+app.use(passport.session());
 
 app.get('/count', function (req, res){
     if(req.session.count){
