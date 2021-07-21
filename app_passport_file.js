@@ -5,7 +5,7 @@ var bodyParser = require('body-parser');
 var bkfd2Password = require("pbkdf2-password");
 var passport = require('passport')
 var LocalStrategy = require('passport-local').Strategy;
-
+var FacebookStrategy = require('passport-facebook').Strategy;
 var hasher = bkfd2Password();
 
 
@@ -99,6 +99,19 @@ passport.use(new LocalStrategy(
     }
 ));
 
+passport.use(new FacebookStrategy
+    (
+        {
+            clientID: '4099624960124689',
+            clientSecret: 'c8fb98c83b0ef64ccb628dd815c2e949',
+            callbackURL: "/auth/facebook/callback"
+        },
+        function (aceessToken, refreshToken, profile, done){
+            console.log(profile);
+        }
+    )
+)
+
 app.post(
     '/auth/login',
     passport.authenticate(
@@ -113,6 +126,23 @@ app.post(
             });
         }
     );
+
+// 타사인증은 왔다 갔다 하기 때문에 과정이 더 있음.
+app.get(
+    '/auth/facebook',
+    passport.authenticate(
+        'facebook'
+    )
+);
+app.get(
+    '/auth/facebook/callback',
+    passport.authenticate(
+        'facebook',
+        { failureRedirect: '/auth/login' }),
+    function(req, res) {
+        // Successful authentication, redirect home.
+        res.redirect('/welcome');
+    });
 
 
 var users = [
@@ -176,6 +206,7 @@ app.get('/auth/login', function (req, res){
             <input type="submit">
         </p>
     </form>
+    <a href="/auth/facebook">facebook</a>
     `
     res.send(output);
 })
