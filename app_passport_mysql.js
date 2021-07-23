@@ -1,12 +1,22 @@
 var express = require('express');
 var session = require('express-session');
-var FileStore = require('session-file-store')(session);
+var MySQLStore = require('express-mysql-session');
 var bodyParser = require('body-parser');
 var bkfd2Password = require("pbkdf2-password");
 var passport = require('passport')
 var LocalStrategy = require('passport-local').Strategy;
 var FacebookStrategy = require('passport-facebook').Strategy;
 var hasher = bkfd2Password();
+var mysql = require('mysql');
+var conn   = mysql.createConnection({
+    host: 'localhost',
+    port: 3306,
+    user: 'root',
+    password: 'qlalfqjsgh1',
+    database: 'o2'
+});
+
+conn.connect()
 
 var app = express();
 app.use(bodyParser.urlencoded({extended: false}))
@@ -16,7 +26,13 @@ app.use(session({
     secret: 'fsadf3@@e213t',
     resave: false,
     saveUninitialized: true,
-    store: new FileStore()
+    store: new MySQLStore({
+        host: 'localhost',
+        port: 3306,
+        user: 'root',
+        password: 'qlalfqjsgh1',
+        database: 'o2'
+    })
 }));
 
 app.use(passport.initialize());
@@ -61,17 +77,20 @@ app.get('/welcome', function (req, res){
 passport.serializeUser(function(user, done) {
     // user의 고유한 값을 인자로 주면 됨. (이 스크립트 안에서는 username) -> 세션에 저장
     console.log('serializeUser', user);
-    done(null, user.username);
+    done(null, user.authId);
 });
 
 passport.deserializeUser(function(id, done) {
     console.log('deserializeUser', id);
-    for(var i=0; i<users.length; i++){
-        var user = users[i];
-        if (user.username === id) {
-            return done(null, user);
+    var sql = 'SELECT * FROM users WHERE authId=?'
+    conn.query(sql, [id], function (err, results){
+        if(err){
+            console.log(err);
+            done('There is no user.');
+        } else {
+            done(null, results[0]);
         }
-    }
+    });
 });
 
 passport.use(new LocalStrategy(
@@ -79,22 +98,25 @@ passport.use(new LocalStrategy(
         // 기존 사용자가 맞는지 확인
         var uname = username;
         var pwd = password;
-        for(var i=0; i<users.length; i++){
-            var user = users[i];
-            if (uname === user.username) {
-                return hasher({password: pwd, salt:user.salt},
-                function(err, pass, salt, hash) {
-                    if (hash === user.password) {
-                        // 로그인 성공 인증된 사용자임이 확인
-                        console.log('LocalStrategy', user);
-                        done(null, user);
-                    } else {
-                        done(null, false);
-                    }
-                });
+        var sql = 'SELECT * FROM users WHERE authId=?'
+        conn.query(sql, ['local:'+uname], function (err, results){
+            console.log(results)
+            if(err){
+                return done('There is no user.')
             }
-        }
-        done(null, false);
+            var user = results[0];
+            console.log(user)
+            return hasher({password: pwd, salt:user.salt},
+                    function(err, pass, salt, hash) {
+                        if (hash === user.password) {
+                            // 로그인 성공 인증된 사용자임이 확인
+                            console.log('LocalStrategy', user);
+                            done(null, user);
+                        } else {
+                            done(null, false);
+                        }
+                    });
+        })
     }
 ));
 
@@ -103,10 +125,35 @@ passport.use(new FacebookStrategy
         {
             clientID: '4099624960124689',
             clientSecret: 'c8fb98c83b0ef64ccb628dd815c2e949',
-            callbackURL: "http://localhost:3003/auth/facebook/callback"
+            callbackURL: "http://localhost:3003/auth/facebook/callback",
+            profileFields: ['id','email', 'gender', 'link', 'locale', 'name',
+            'timezone', 'updated_time','verified', 'displayName']
         },
         function (aceessToken, refreshToken, profile, done){
             console.log(profile);
+            var authId = 'facebook: '+profile.id;
+            var sql = 'SELECT * FROM users WHERE authId=?';
+            conn.query(sql, [authId], function (err, results){
+                if(results.length>0){
+                    done(null, results[0]);
+                } else {
+                    var newuser = {
+                        'authId': authId,
+                        'displayName': profile.displayName,
+                        'email': profile.emails[0].value
+                    };
+
+                    var sql = 'INSERT INTO users SET ?'
+                    conn.query(sql, [], function (err, results){
+                        if(err){
+                            console.log(err);
+                            done('Error');
+                        } else {
+                            done(null, newuser);
+                        }
+                    })
+                }
+            })
         }
     )
 )
@@ -154,31 +201,41 @@ app.get(
         }));
 
 
-var users = [
+var users =
     {
         username: 'egoing',
         password: 'o4/UB6Cl78nJCJHOE11WXNikaZGR34otgENF/ZkouisQKFaEnLR2hHppsUXQwxNl1AnURUqdrJ4R4WGw+6mbs11kV7EP2SQiGBzMk0Xu87Q71brqi7EUCQr1Y15baz90dtjn/WAJdsQKm4qEI0iJBYHwKL/Wf1dorohsz3RqOYQ=',
         salt: 'zDEnAkYbeJaOzdo+EMLF1ppW3FcjUNbYiwUiDYZuu/PV91yvtEXyNoQm/uf+31fy19YDG0Ul3/OVYaweuEqp4Q==',
         displayName: 'Egoing'
-    }
-];
+    };
 
-app.post('/auth/register', function(req, res){
-    hasher({password: req.body.password}, function (err, pass, salt, hash){
+
+app.post('/auth/register', function(req, res) {
+    hasher({password: req.body.password}, function (err, pass, salt, hash) {
         var user = {
+            authId: 'local:' + req.body.username,
             username: req.body.username,
             password: hash,
             salt: salt,
             displayName: req.body.displayName
         };
-        users.push(user);
-        req.login(user, function (err){
-            req.session.save(function(){
-                res.redirect('/welcome');
-            });
+
+        var sql = 'INSERT INTO users SET ?';
+        conn.query(sql, user, function (err, results) {
+            if (err) {
+                console.log(err);
+                res.status(500);
+            } else {
+                req.login(user, function (err) {
+                    req.session.save(function () {
+                        res.redirect('/welcome');
+                    });
+                });
+            }
         });
     });
 });
+
 app.get('/auth/register', function(req, res){
     var output = `
     <h1>Register</h1>
