@@ -1,17 +1,23 @@
 var express = require('express');
 var session = require('express-session');
-var FileStore = require('session-file-store')(session);
+var MySQLStore = require('express-mysql-session')(session);
 var bodyParser = require('body-parser')
 var app = express();
 app.use(bodyParser.urlencoded({extended: false}))
 
+// MySQL의 경우 DB라 옵션을 반드시 사용해야함
 app.use(session({
     secret: 'fsadf3@@e213t',
     resave: false,
     saveUninitialized: true,
-    store: new FileStore()
+    store: new MySQLStore({
+        host: 'localhost',
+        port: 3306,
+        user: 'root',
+        password: 'qlalfqjsgh1',
+        database: 'session_test'
+    })
 }));
-
 
 app.get('/count', function (req, res){
     if(req.session.count){
